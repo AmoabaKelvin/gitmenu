@@ -15,8 +15,8 @@ struct Avatar: View {
     }
 }
 
-/// Octicon rendered as a template image so it takes the foreground color.
-struct Octicon: View {
+/// Hugeicon (stroke rounded, MIT) rendered as a template image so it takes the foreground color.
+struct Icon: View {
     let name: String
     var size: CGFloat = 16
 
@@ -26,13 +26,13 @@ struct Octicon: View {
         if let img = Self.image(name) {
             Image(nsImage: img).renderingMode(.template).resizable().frame(width: size, height: size)
         } else {
-            Image(systemName: "bell").font(.system(size: size))
+            Color.clear.frame(width: size, height: size)
         }
     }
 
     static func image(_ name: String) -> NSImage? {
         if let c = cache[name] { return c }
-        guard let url = Bundle.main.url(forResource: "octicon-\(name)", withExtension: "svg"), let img = NSImage(contentsOf: url) else { return nil }
+        guard let url = Bundle.main.url(forResource: "hugeicon-\(name)", withExtension: "svg"), let img = NSImage(contentsOf: url) else { return nil }
         img.isTemplate = true
         cache[name] = img
         return img
@@ -40,7 +40,7 @@ struct Octicon: View {
 }
 
 enum Appearance {
-    static func octicon(type: String, state: SubjectState) -> String {
+    static func glyph(type: String, state: SubjectState) -> String {
         switch type {
         case "PullRequest":
             switch state {

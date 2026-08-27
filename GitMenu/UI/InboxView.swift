@@ -37,7 +37,7 @@ struct InboxView: View {
                 emptyState("You're all caught up.")
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         ForEach(items) { t in
                             ThreadRow(thread: t, details: model.details[t.id])
                                 .contentShape(Rectangle())
@@ -63,7 +63,7 @@ struct InboxView: View {
                 emptyState(empty)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         ForEach(items) { item in
                             WorkRow(item: item)
                                 .contentShape(Rectangle())
@@ -78,8 +78,7 @@ struct InboxView: View {
     private func emptyState(_ text: String) -> some View {
         VStack(spacing: 6) {
             Spacer()
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 26))
+            Icon(name: "check-circle", size: 28)
                 .foregroundStyle(.tertiary)
             Text(text)
                 .font(.callout)
@@ -109,7 +108,7 @@ struct InboxView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
+            Button { model.refresh() } label: { Icon(name: "refresh", size: 16) }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .focusEffectDisabled()
@@ -122,7 +121,7 @@ struct InboxView: View {
                 Button("Sign out") { model.signOut() }
                 Button("Quit GitMenu") { NSApp.terminate(nil) }
             } label: {
-                Image(systemName: "ellipsis").foregroundStyle(.secondary)
+                Icon(name: "more", size: 16).foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -171,16 +170,17 @@ struct WorkRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 4) {
-                Octicon(name: Appearance.octicon(type: item.subjectType, state: item.state), size: 18)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(spacing: 3) {
+                Icon(name: Appearance.glyph(type: item.subjectType, state: item.state), size: 20)
                     .foregroundStyle(Appearance.stateColor(item.state))
                     .frame(width: 24, height: 22)
                 Text(String(item.number))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .fixedSize()
             }
-            .frame(width: 30)
+            .frame(width: 28)
             .padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 0) {
@@ -198,7 +198,7 @@ struct WorkRow: View {
                     .lineLimit(1)
                     Spacer(minLength: 8)
                     if hovering {
-                        Button { model.open(item) } label: { Image(systemName: "arrow.up.forward").frame(width: 24, height: 24) }
+                        Button { model.open(item) } label: { Icon(name: "arrow-up-right", size: 16).frame(width: 24, height: 24) }
                             .buttonStyle(.plain)
                             .font(.system(size: 12, weight: .semibold))
                             .transition(.opacity)
@@ -232,13 +232,9 @@ struct WorkRow: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(height: 78)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(hovering ? 0.06 : 0))
-                .padding(.horizontal, 6)
-        )
+        .padding(.vertical, 12)
+        .frame(height: 82)
+        .background(Color.primary.opacity(hovering ? 0.06 : 0))
         .onHover { h in withAnimation(.easeOut(duration: 0.18)) { hovering = h } }
     }
 }
@@ -251,6 +247,17 @@ struct ThreadRow: View {
 
     private var state: SubjectState { details?.state ?? .none }
     private var repoName: String { thread.repository.name }
+    private var subjectKind: String {
+        switch thread.subject.type {
+        case "PullRequest": return "Pull request"
+        case "Issue": return "Issue"
+        case "Release": return "Release"
+        case "Discussion": return "Discussion"
+        case "Commit": return "Commit"
+        case "CheckSuite", "WorkflowRun": return "Workflow run"
+        default: return "Activity"
+        }
+    }
     private var newCount: Int { details?.newActivities(since: thread.lastReadAt).count ?? 0 }
 
     /// The event that caused this notification: the latest activity when it lines up with `updated_at`, else the reason.
@@ -279,19 +286,20 @@ struct ThreadRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 4) {
-                Octicon(name: Appearance.octicon(type: thread.subject.type, state: state), size: 18)
+        HStack(alignment: .top, spacing: 8) {
+            VStack(spacing: 3) {
+                Icon(name: Appearance.glyph(type: thread.subject.type, state: state), size: 20)
                     .foregroundStyle(Appearance.stateColor(state))
                     .frame(width: 24, height: 22)
                 if hovering, let n = details?.number ?? thread.subjectNumber {
                     Text(String(n))
                         .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .fixedSize()
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .frame(width: 30)
+            .frame(width: 28)
             .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -319,16 +327,22 @@ struct ThreadRow: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(height: 78)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(hovering ? 0.06 : 0))
-                .padding(.horizontal, 6)
-        )
+        .padding(.vertical, 12)
+        .frame(height: 82)
+        .background(Color.primary.opacity(hovering ? 0.06 : 0))
         .overlay(alignment: .topTrailing) {
             if thread.unread {
-                Circle().fill(.orange).frame(width: 7, height: 7).padding(.top, 7).padding(.trailing, 8)
+                if newCount > 1 {
+                    Text(String(newCount))
+                        .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 15, minHeight: 15)
+                        .background(.orange, in: Capsule())
+                        .padding(.top, 5).padding(.trailing, 6)
+                } else {
+                    Circle().fill(.orange).frame(width: 7, height: 7).padding(.top, 7).padding(.trailing, 8)
+                }
             }
         }
         .onHover { h in withAnimation(.easeOut(duration: 0.18)) { hovering = h } }
@@ -337,7 +351,7 @@ struct ThreadRow: View {
     private var metaLine: some View {
         HStack(spacing: 4) {
             let e = event
-            Text(e?.verb ?? Reason.phrase(thread.reason))
+            Text(e?.verb ?? (thread.reason == "subscribed" ? subjectKind : Reason.phrase(thread.reason)))
                 .foregroundStyle(.primary)
                 .fixedSize()
             if let actor = e?.actor {
@@ -347,12 +361,6 @@ struct ThreadRow: View {
             }
             Text("in").foregroundStyle(.tertiary)
             Text(repoName).foregroundStyle(.primary).truncationMode(.tail)
-            if thread.unread, newCount > 1 {
-                Text(String(newCount) + " new")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.orange)
-                    .fixedSize()
-            }
         }
         .font(.system(size: 13))
     }
@@ -375,19 +383,19 @@ struct ThreadRow: View {
                     }
                 }
             } label: {
-                Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                Icon(name: "more", size: 16).frame(width: 24, height: 24)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("More")
             Button { model.open(thread) } label: {
-                Image(systemName: "arrow.up.forward").frame(width: 24, height: 24)
+                Icon(name: "arrow-up-right", size: 16).frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
             .help("Open on GitHub")
             Button { model.markDone(thread) } label: {
-                Image(systemName: "checkmark")
+                Icon(name: "tick", size: 16)
                     .frame(width: 30, height: 24)
                     .background(.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             }

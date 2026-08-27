@@ -9,8 +9,7 @@ struct SignInView: View {
         VStack(spacing: 0) {
             Spacer()
             VStack(spacing: 6) {
-                Image(systemName: "bell.badge")
-                    .font(.system(size: 28, weight: .regular))
+                Icon(name: "bell", size: 32)
                     .foregroundStyle(.secondary)
                 Text("GitMenu")
                     .font(.title3.weight(.semibold))

@@ -28,7 +28,7 @@ struct ThreadDetailView: View {
                     .foregroundStyle(.tertiary)
                 Spacer()
                 Button { model.open(thread) } label: {
-                    Label("Open on GitHub", systemImage: "arrow.up.forward")
+                    HStack(spacing: 6) { Icon(name: "arrow-up-right", size: 14); Text("Open on GitHub") }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: [])
@@ -42,7 +42,7 @@ struct ThreadDetailView: View {
     private var toolbar: some View {
         HStack(spacing: 8) {
             Button { model.selected = nil } label: {
-                Label("Inbox", systemImage: "chevron.left")
+                HStack(spacing: 2) { Icon(name: "chevron-left", size: 14); Text("Inbox") }
             }
             .buttonStyle(.borderless)
             .keyboardShortcut(.escape, modifiers: [])
@@ -58,7 +58,7 @@ struct ThreadDetailView: View {
                         NSPasteboard.general.setString(u.absoluteString, forType: .string)
                     }
                 }
-            } label: { Image(systemName: "ellipsis.circle") }
+            } label: { Icon(name: "more", size: 16) }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
@@ -70,7 +70,7 @@ struct ThreadDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Octicon(name: Appearance.octicon(type: thread.subject.type, state: state), size: 14)
+                Icon(name: Appearance.glyph(type: thread.subject.type, state: state), size: 15)
                     .foregroundStyle(Appearance.stateColor(state))
                 if let n = details?.number ?? thread.subjectNumber, let url = URL(string: details?.htmlUrl ?? thread.repository.htmlUrl) {
                     Link("#" + String(n), destination: url)
@@ -94,13 +94,13 @@ struct ThreadDetailView: View {
                 HStack(spacing: 10) {
                     Text(statusText).foregroundStyle(Appearance.stateColor(state))
                     if let r = details?.reviewDecision, let (icon, text, color) = reviewBadge(r) {
-                        Label(text, systemImage: icon)
+                        HStack(spacing: 4) { Icon(name: icon, size: 14); Text(text) }
                             .foregroundStyle(color)
                             .lineLimit(1)
                             .fixedSize()
                     }
                     if let c = details?.checksState {
-                        Image(systemName: c == "SUCCESS" ? "checkmark.circle.fill" : (c == "FAILURE" || c == "ERROR") ? "xmark.circle.fill" : "clock.fill")
+                        Icon(name: c == "SUCCESS" ? "check-circle" : (c == "FAILURE" || c == "ERROR") ? "cancel-circle" : "clock", size: 15)
                             .foregroundStyle(c == "SUCCESS" ? Appearance.stateColor(.open) : (c == "FAILURE" || c == "ERROR") ? Appearance.stateColor(.closed) : .orange)
                             .help("Checks: \(c.lowercased())")
                     }
@@ -145,8 +145,8 @@ struct ThreadDetailView: View {
 
     private func reviewBadge(_ r: String) -> (String, String, Color)? {
         switch r {
-        case "APPROVED": return ("checkmark.seal.fill", "Approved", Appearance.stateColor(.open))
-        case "CHANGES_REQUESTED": return ("exclamationmark.circle.fill", "Changes requested", Appearance.stateColor(.closed))
+        case "APPROVED": return ("check-circle", "Approved", Appearance.stateColor(.open))
+        case "CHANGES_REQUESTED": return ("alert", "Changes requested", Appearance.stateColor(.closed))
         case "REVIEW_REQUIRED": return ("eye", "Review required", .secondary)
         default: return nil
         }
@@ -188,7 +188,7 @@ struct ThreadDetailView: View {
                         if let au = a.author {
                             Avatar(url: au.avatarUrl, size: 20)
                         } else {
-                            Image(systemName: "person.crop.circle").font(.system(size: 20)).foregroundStyle(.tertiary).frame(width: 20, height: 20)
+                            Icon(name: "user", size: 20).foregroundStyle(.tertiary)
                         }
                         Text(headline(a)).font(.system(size: 13))
                         Spacer()
