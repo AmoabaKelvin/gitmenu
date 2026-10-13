@@ -98,5 +98,8 @@ enum Reason {
         }
     }
 
+    static let all = ["review_requested", "mention", "team_mention", "assign", "approval_requested", "security_alert",
+                      "author", "comment", "state_change", "subscribed", "manual", "ci_activity", "invitation"]
+
     static let urgent: Set<String> = ["review_requested", "mention", "team_mention", "assign", "approval_requested", "security_alert"]
 }

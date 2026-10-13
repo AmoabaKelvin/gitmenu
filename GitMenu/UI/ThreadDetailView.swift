@@ -51,13 +51,7 @@ struct ThreadDetailView: View {
                 .controlSize(.small)
                 .keyboardShortcut("e", modifiers: [])
             Menu {
-                Button("Mute thread") { model.mute(thread) }
-                if let u = model.webUrl(thread) {
-                    Button("Copy link") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(u.absoluteString, forType: .string)
-                    }
-                }
+                ThreadActions(thread: thread)
             } label: { Icon(name: "more", size: 16) }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)

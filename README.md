@@ -6,7 +6,30 @@ A macOS menu bar app for GitHub notifications. Native Swift, no Electron.
 - Polls GitHub every 5 seconds with conditional requests, so new activity shows up within seconds of GitHub recording it.
 - Thread view with a timeline of comments, reviews and events, rendered markdown, and @mentions that open profiles.
 - System notifications with Open and Mark done actions; one banner per thread that updates in place.
-- Octocat in the menu bar with the unread count. Launch at login.
+- Filter by repository, title or author, group the inbox by repository, and snooze threads until later.
+- Keyboard driven: a global shortcut opens the panel (⌃⌥G by default) and the list has single-key actions.
+- Octocat in the menu bar with the unread count; it dims when syncing is failing. Launch at login.
+- Settings for the shortcut, poll interval, and which reasons and repositories raise a banner.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `J` `K` or arrows | Move through the list |
+| `Return` | Open the thread; in a thread, open it on GitHub |
+| `O` | Open on GitHub |
+| `E` | Mark as done |
+| `R` | Mark as read |
+| `S` / `Shift S` | Snooze for three hours / until tomorrow 9:00 |
+| `Shift M` | Mute the thread |
+| `/` or `Cmd F` | Filter |
+| `G` | Group by repository |
+| `1` to `4` | Switch tab |
+| `Cmd R` | Refresh |
+| `Cmd ,` | Settings |
+| `Esc` | Go back, clear the filter, or close |
+
+Snoozing is local to GitMenu, since GitHub has no API for it. A snoozed thread leaves the inbox and the unread count, then comes back as unread with a banner.
 
 ## Requirements
 
@@ -38,7 +61,7 @@ defaults write com.kelvinamoaba.GitMenu oauthClientId <client id>
 
 The research behind these choices is in `docs/research.md`.
 
-- `GET /notifications?all=true` every 5 seconds with `If-Modified-Since`. GitHub answers 304 (free) or only the threads updated since, read or not. Backs off for two minutes on a 403 or 429.
+- `GET /notifications?all=true` every 5 seconds (configurable) with `If-Modified-Since`. GitHub answers 304 (free) or only the threads updated since, read or not. Backs off for two minutes on a 403 or 429.
 - Every 10 minutes a full walk lists everything not yet done plus the unread list, so threads read or done on GitHub or in another client are reconciled.
 - Also syncs on wake, on network return, when the panel opens, and after each local action. Holds a `ProcessInfo` activity so App Nap does not throttle the timer.
 - Changed threads are enriched in batches of 50 through one GraphQL query: state, review decision, checks, labels, and the last 12 timeline items.

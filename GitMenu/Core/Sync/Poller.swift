@@ -9,6 +9,32 @@ struct SyncDelta {
     var previousNewest: Date = .distantPast
 }
 
+/// What is wrong with syncing, if anything. Shown in the panel and on the menu bar icon.
+enum SyncIssue: Equatable {
+    case offline
+    case rateLimited(until: Date)
+    case unauthenticated
+    case failing(String)
+
+    var title: String {
+        switch self {
+        case .offline: return "You're offline"
+        case .rateLimited: return "GitHub is rate limiting GitMenu"
+        case .unauthenticated: return "GitHub rejected your token"
+        case .failing: return "Syncing is failing"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .offline: return "Showing what was last synced."
+        case .rateLimited(let until): return "Trying again at \(until.formatted(date: .omitted, time: .shortened))."
+        case .unauthenticated: return "It expired or was revoked. Sign in again to keep syncing."
+        case .failing(let message): return message
+        }
+    }
+}
+
 /// Polls GET /notifications every few seconds and on every event that suggests something changed:
 /// wake, network return, panel open, our own mutations.
 @MainActor
@@ -17,22 +43,24 @@ final class Poller {
     private let store: Store
     private let enricher: Enricher
     private let onDelta: (SyncDelta) -> Void
-    private let onStatus: (String?) -> Void
+    private let onStatus: (SyncIssue?) -> Void
 
     private var timer: Timer?
     private var pathMonitor: NWPathMonitor?
     private var online = true
     private var activity: NSObjectProtocol?
-    /// Same cadence as Neat. 304 responses are free, so this costs nothing until GitHub says otherwise.
-    private let pollInterval: TimeInterval = 5
-    private let fullWalkEvery = 120
+    /// Defaults to 5 seconds, the same cadence as Neat. 304 responses are free, so this costs nothing until GitHub says otherwise.
+    private var pollInterval: TimeInterval
+    private let fullWalkEvery: TimeInterval = 600
+    private var lastFullWalk: Date = .distantPast
     private var backoffUntil: Date = .distantPast
-    private var pollCount = 0
+    private var failures = 0
     private var syncing = false
     private var pendingResync = false
     private var lastSyncStart: Date = .distantPast
 
-    init(client: GitHubClient, store: Store, enricher: Enricher, onDelta: @escaping (SyncDelta) -> Void, onStatus: @escaping (String?) -> Void) {
+    init(client: GitHubClient, store: Store, enricher: Enricher, interval: TimeInterval, onDelta: @escaping (SyncDelta) -> Void, onStatus: @escaping (SyncIssue?) -> Void) {
+        pollInterval = interval
         self.client = client
         self.store = store
         self.enricher = enricher
@@ -52,6 +80,7 @@ final class Poller {
                 let was = self.online
                 self.online = path.status == .satisfied
                 if self.online && !was { await self.syncNow(reason: "network") }
+                if !self.online && was { self.onStatus(.offline) }
             }
         }
         m.start(queue: .global(qos: .utility))
@@ -64,6 +93,12 @@ final class Poller {
         timer?.invalidate()
         pathMonitor?.cancel()
         if let a = activity { ProcessInfo.processInfo.endActivity(a) }
+    }
+
+    func setInterval(_ interval: TimeInterval) {
+        guard interval != pollInterval else { return }
+        pollInterval = interval
+        if timer != nil { reschedule() }
     }
 
     private func reschedule() {
@@ -91,14 +126,22 @@ final class Poller {
         }
         do {
             try await sync(force: force)
+            failures = 0
             onStatus(nil)
         } catch {
             logger.error("sync failed: \(error.localizedDescription)")
-            if case GitHubError.http(let code, _) = error, code == 403 || code == 429 {
+            failures += 1
+            // One dropped request on a short poll is noise; auth and rate limits are not.
+            if case GitHubError.unauthenticated = error {
+                backoffUntil = Date().addingTimeInterval(60)
+                onStatus(.unauthenticated)
+            } else if case GitHubError.http(let code, _) = error, code == 403 || code == 429 {
                 backoffUntil = Date().addingTimeInterval(120)
                 logger.error("rate limited; backing off for 2 minutes")
+                onStatus(.rateLimited(until: backoffUntil))
+            } else if failures >= 3 {
+                onStatus(error is URLError ? .offline : .failing(error.localizedDescription))
             }
-            onStatus(error.localizedDescription)
         }
     }
 
@@ -106,8 +149,7 @@ final class Poller {
     /// A full walk lists everything not yet done (`all=true`) plus the unread list, so threads read or
     /// done on another client are reconciled here.
     private func sync(force: Bool) async throws {
-        pollCount += 1
-        let fullWalk = force || !store.state.fullSyncDone || pollCount % fullWalkEvery == 0
+        let fullWalk = force || !store.state.fullSyncDone || Date().timeIntervalSince(lastFullWalk) >= fullWalkEvery
         let ifModified = fullWalk ? nil : store.state.lastModified
         let known = store.state.threads
         let previousNewest = known.values.map(\.updatedAt).max() ?? .distantPast
@@ -176,6 +218,7 @@ final class Poller {
             s.lastSync = Date()
             s.fullSyncDone = true
         }
+        if fullWalk { lastFullWalk = Date() }
         logger.info("sync done: full=\(fullWalk) fetched=\(fetched.count) requests=\(page) added=\(delta.added.count) updated=\(delta.updated.count) nowRead=\(nowRead.count) done=\(doneElsewhere.count) enriched=\(details.count)")
         onDelta(delta)
     }

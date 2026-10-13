@@ -18,6 +18,7 @@ struct RootView: View {
             }
         }
         .frame(width: 400, height: 560)
+        .environmentObject(model.prefs)
         .animation(.easeOut(duration: 0.18), value: model.selected?.id)
     }
 }

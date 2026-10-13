@@ -33,7 +33,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func post(thread: NotificationThread, details: ThreadDetails?) {
+    func post(thread: NotificationThread, details: ThreadDetails?, sound: Bool = true, note: String? = nil) {
         let c = UNMutableNotificationContent()
         c.title = thread.subject.title
         var sub = thread.repository.fullName
@@ -45,13 +45,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             let snippet = a.body.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
             body = snippet.isEmpty ? "\(who): \(a.kind)" : "\(who): \(snippet)"
         }
-        c.body = body
+        c.body = note ?? body
         c.categoryIdentifier = Self.category
         c.userInfo = ["threadId": thread.id]
         c.threadIdentifier = thread.repository.fullName
-        c.sound = Reason.urgent.contains(thread.reason) ? .default : nil
+        c.sound = sound && Reason.urgent.contains(thread.reason) ? .default : nil
         let new = details?.newActivities(since: thread.lastReadAt).count ?? 0
-        if new > 1 { c.title = "\(new) new · " + thread.subject.title }
+        if new > 1, note == nil { c.title = "\(new) new · " + thread.subject.title }
         let req = UNNotificationRequest(identifier: "thread-\(thread.id)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(req) { e in
             logger.info("posted notification for \(thread.id) error=\(e?.localizedDescription ?? "none")")

@@ -2,12 +2,28 @@ import SwiftUI
 
 struct InboxView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var prefs: Prefs
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if model.searching {
+                Hairline()
+                searchBar
+            }
             Hairline()
-            content
+            if let issue = model.issue { IssueBanner(issue: issue) }
+            ScrollViewReader { proxy in
+                content
+                    .onChange(of: model.cursor) { _, c in
+                        if let c { withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(c) } }
+                    }
+            }
+            if model.tab == .inbox, !model.snoozedThreads.isEmpty {
+                Hairline()
+                snoozedBar
+            }
             Hairline()
             footer
         }
@@ -21,40 +37,74 @@ struct InboxView: View {
                 }
             }
             Spacer(minLength: 4)
+            Button { model.searching ? model.endSearch() : model.startSearch() } label: {
+                Icon(name: "search", size: 15).frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(model.searching ? .primary : .secondary)
+            .focusEffectDisabled()
+            .help("Filter (/)")
+            .padding(.bottom, 6)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 0)
     }
 
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Icon(name: "search", size: 14).foregroundStyle(.tertiary)
+            TextField("Filter by repository, title or author", text: $model.query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($searchFocused)
+            if !model.query.isEmpty {
+                Button { model.query = "" } label: { Icon(name: "cancel-circle", size: 14) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Clear")
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .onAppear { DispatchQueue.main.async { searchFocused = true } }
+        .onChange(of: model.query) { model.cursor = nil }
+    }
+
     @ViewBuilder private var content: some View {
         switch model.tab {
-        case .assigned: workList(model.work.assigned, empty: "Nothing assigned to you.")
-        case .reviews: workList(model.work.reviews, empty: "No reviews waiting on you.")
+        case .assigned: workList(model.visibleWork(model.work.assigned), empty: "Nothing assigned to you.")
+        case .reviews: workList(model.visibleWork(model.work.reviews), empty: "No reviews waiting on you.")
         default:
             let items = model.visible
             if items.isEmpty {
-                emptyState("You're all caught up.")
+                emptyState(model.showSnoozed ? "Nothing snoozed." : "You're all caught up.")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(items) { t in
-                            ThreadRow(thread: t, details: model.details[t.id])
-                                .contentShape(Rectangle())
-                                .onTapGesture { model.selected = t }
-                                .contextMenu {
-                                    Button("Open on GitHub") { model.open(t) }
-                                    Button("Mark as read") { model.markRead(t) }.disabled(!t.unread)
-                                    Button("Mark as done") { model.markDone(t) }
-                                    Divider()
-                                    Button("Mute thread") { model.mute(t) }
+                        if model.grouped {
+                            ForEach(model.groups) { g in
+                                let collapsed = prefs.collapsedRepos.contains(g.id)
+                                GroupHeader(group: g, collapsed: collapsed)
+                                if !collapsed {
+                                    ForEach(g.threads) { row($0, showRepo: false) }
                                 }
-                                .id(t.id)
+                            }
+                        } else {
+                            ForEach(items) { row($0, showRepo: true) }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func row(_ t: NotificationThread, showRepo: Bool) -> some View {
+        ThreadRow(thread: t, details: model.details[t.id], focused: model.cursor == t.id, showRepo: showRepo, snoozedUntil: prefs.snoozed[t.id])
+            .contentShape(Rectangle())
+            .onTapGesture { model.selected = t }
+            .contextMenu { ThreadActions(thread: t) }
+            .id(t.id)
     }
 
     private func workList(_ items: [WorkItem], empty: String) -> some View {
@@ -65,9 +115,10 @@ struct InboxView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(items) { item in
-                            WorkRow(item: item)
+                            WorkRow(item: item, focused: model.cursor == item.id)
                                 .contentShape(Rectangle())
                                 .onTapGesture { model.open(item) }
+                                .id(item.id)
                         }
                     }
                 }
@@ -76,16 +127,37 @@ struct InboxView: View {
     }
 
     private func emptyState(_ text: String) -> some View {
-        VStack(spacing: 6) {
+        let filtering = !model.query.trimmingCharacters(in: .whitespaces).isEmpty
+        return VStack(spacing: 6) {
             Spacer()
-            Icon(name: "check-circle", size: 28)
+            Icon(name: filtering ? "search" : "check-circle", size: 28)
                 .foregroundStyle(.tertiary)
-            Text(text)
+            Text(filtering ? "Nothing matches \u{201C}\(model.query)\u{201D}." : text)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
             Spacer()
         }
+        .padding(.horizontal, 24)
         .frame(maxWidth: .infinity)
+    }
+
+    private var snoozedBar: some View {
+        Button { withAnimation(.easeOut(duration: 0.15)) { model.showSnoozed.toggle() } } label: {
+            HStack(spacing: 6) {
+                Icon(name: model.showSnoozed ? "chevron-left" : "clock", size: 13)
+                Text(model.showSnoozed ? "Back to inbox" : "\(model.snoozedThreads.count) snoozed")
+                Spacer()
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
     }
 
     private var footer: some View {
@@ -95,28 +167,24 @@ struct InboxView: View {
                 Text(u.login).font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
-            if let s = model.status {
-                Label(s, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-                    .help(s)
-            } else if let d = model.lastSync {
+            if let d = model.lastSync {
                 TimelineView(.periodic(from: .now, by: 5)) { _ in
-                    Text("Synced \(Appearance.relative(d)) ago")
+                    // Two minutes without a sync is well past any poll interval, so say so.
+                    let age = -d.timeIntervalSinceNow, stale = age > 120
+                    Text(age < 60 ? "Synced just now" : age < 86400 * 7 ? "Synced \(Appearance.relative(d)) ago" : "Last synced \(Appearance.relative(d))")
                         .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(stale ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
                 }
             }
             Button { model.refresh() } label: { Icon(name: "refresh", size: 16) }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .focusEffectDisabled()
-                .help("Refresh")
+                .help("Refresh (⌘R)")
             Menu {
                 Button("Mark all as read") { model.markAllVisibleRead() }
-                Toggle("Launch at login", isOn: $model.launchAtLogin)
-                Button("Send test notification") { model.notifier.postTest() }
+                Toggle("Group by repository", isOn: $prefs.groupByRepo)
+                Button("Settings…") { model.onOpenSettings?() }
                 Divider()
                 Button("Sign out") { model.signOut() }
                 Button("Quit GitMenu") { NSApp.terminate(nil) }
@@ -129,6 +197,74 @@ struct InboxView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+}
+
+struct IssueBanner: View {
+    @EnvironmentObject var model: AppModel
+    let issue: SyncIssue
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                Icon(name: "alert", size: 15).foregroundStyle(.orange).padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(issue.title).font(.system(size: 12, weight: .semibold))
+                    Text(issue.detail).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if issue == .unauthenticated {
+                    Button("Sign in again") { model.signOut() }.controlSize(.small)
+                } else {
+                    Button("Retry") { model.refresh() }.controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.orange.opacity(0.1))
+            Hairline()
+        }
+    }
+}
+
+struct GroupHeader: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var prefs: Prefs
+    let group: RepoGroup
+    let collapsed: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Icon(name: collapsed ? "chevron-right" : "chevron-down", size: 12).foregroundStyle(.tertiary)
+            Avatar(url: group.avatarUrl, size: 14, rounded: false)
+            Text(group.name)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            if hovering {
+                Button("Mark all done") { model.markDone(group.threads) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .help("Mark every notification in \(group.name) as done")
+            } else {
+                Text(group.unread > 0 ? "\(group.unread) unread" : "\(group.threads.count)")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 30)
+        .background(Color.primary.opacity(hovering ? 0.07 : 0.035))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.18)) {
+                if collapsed { prefs.collapsedRepos.remove(group.id) } else { prefs.collapsedRepos.insert(group.id) }
+            }
+        }
+        .onHover { hovering = $0 }
     }
 }
 
@@ -167,6 +303,7 @@ struct TabButton: View {
 struct WorkRow: View {
     @EnvironmentObject var model: AppModel
     let item: WorkItem
+    var focused = false
     @State private var hovering = false
 
     var body: some View {
@@ -213,28 +350,15 @@ struct WorkRow: View {
                 Text(item.title)
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    if item.isDraft { Text("Draft").foregroundStyle(.secondary) }
-                    if let r = item.reviewDecision {
-                        Text(r.replacingOccurrences(of: "_", with: " ").lowercased().capitalized)
-                            .foregroundStyle(r == "APPROVED" ? Appearance.stateColor(.open) : r == "CHANGES_REQUESTED" ? Appearance.stateColor(.closed) : .secondary)
-                    }
-                    if let c = item.checksState {
-                        HStack(spacing: 4) {
-                            Circle().fill(c == "SUCCESS" ? Appearance.stateColor(.open) : c == "FAILURE" || c == "ERROR" ? Appearance.stateColor(.closed) : .orange).frame(width: 6, height: 6)
-                            Text("Checks " + c.lowercased()).foregroundStyle(.secondary)
-                        }
-                    }
-                    Text(" ")
-                }
-                .font(.system(size: 12))
-                .frame(height: 18, alignment: .leading)
+                StatusBadges(isDraft: item.isDraft, reviewDecision: item.reviewDecision, checksState: item.checksState)
+                    .frame(height: 18, alignment: .leading)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(height: 82)
-        .background(Color.primary.opacity(hovering ? 0.06 : 0))
+        .background(Color.primary.opacity(focused ? 0.09 : hovering ? 0.06 : 0))
+        .overlay(alignment: .leading) { if focused { Rectangle().fill(Color.accentColor).frame(width: 2) } }
         .onHover { h in withAnimation(.easeOut(duration: 0.18)) { hovering = h } }
     }
 }
@@ -243,6 +367,9 @@ struct ThreadRow: View {
     @EnvironmentObject var model: AppModel
     let thread: NotificationThread
     let details: ThreadDetails?
+    var focused = false
+    var showRepo = true
+    var snoozedUntil: Date?
     @State private var hovering = false
 
     private var state: SubjectState { details?.state ?? .none }
@@ -304,7 +431,7 @@ struct ThreadRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .center, spacing: 0) {
-                    metaLine.lineLimit(1)
+                    metaLine.lineLimit(1).layoutPriority(1)
                     Spacer(minLength: 8)
                     if hovering { actions.transition(.opacity.combined(with: .move(edge: .trailing))) } else { timeLabel.transition(.opacity) }
                 }
@@ -319,7 +446,7 @@ struct ThreadRow: View {
                         MarkdownText(source: p, lineLimit: 1).foregroundStyle(.secondary)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     } else {
-                        Text(" ").font(.system(size: 13))
+                        StatusBadges(reviewDecision: details?.reviewDecision, checksState: details?.checksState)
                     }
                 }
                 .frame(height: 18, alignment: .leading)
@@ -329,7 +456,8 @@ struct ThreadRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(height: 82)
-        .background(Color.primary.opacity(hovering ? 0.06 : 0))
+        .background(Color.primary.opacity(focused ? 0.09 : hovering ? 0.06 : 0))
+        .overlay(alignment: .leading) { if focused { Rectangle().fill(Color.accentColor).frame(width: 2) } }
         .overlay(alignment: .topTrailing) {
             if thread.unread {
                 if newCount > 1 {
@@ -355,33 +483,35 @@ struct ThreadRow: View {
                 .foregroundStyle(.primary)
                 .fixedSize()
             if let actor = e?.actor {
-                Text("by").foregroundStyle(.tertiary)
+                Text("by").foregroundStyle(.tertiary).fixedSize()
                 Text(actor.login).foregroundStyle(.primary).fixedSize()
                 Avatar(url: actor.avatarUrl, size: 16)
             }
-            Text("in").foregroundStyle(.tertiary)
-            Text(repoName).foregroundStyle(.primary).truncationMode(.tail)
+            if showRepo {
+                Text("in").foregroundStyle(.tertiary).fixedSize()
+                Text(repoName).foregroundStyle(.primary).truncationMode(.tail)
+            }
         }
         .font(.system(size: 13))
     }
 
     private var timeLabel: some View {
-        Text(Appearance.relative(thread.updatedAt))
-            .font(.system(size: 12).monospacedDigit())
-            .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            if let until = snoozedUntil {
+                Icon(name: "clock", size: 12)
+                Text(until.formatted(Calendar.current.isDateInToday(until) ? .dateTime.hour().minute() : .dateTime.weekday(.abbreviated).hour().minute()))
+            } else {
+                Text(Appearance.relative(thread.updatedAt))
+            }
+        }
+        .font(.system(size: 12).monospacedDigit())
+        .foregroundStyle(.secondary)
     }
 
     private var actions: some View {
         HStack(spacing: 2) {
             Menu {
-                Button("Mark as read") { model.markRead(thread) }.disabled(!thread.unread)
-                Button("Mute thread") { model.mute(thread) }
-                if let u = model.webUrl(thread) {
-                    Button("Copy link") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(u.absoluteString, forType: .string)
-                    }
-                }
+                ThreadActions(thread: thread)
             } label: {
                 Icon(name: "more", size: 16).frame(width: 24, height: 24)
             }

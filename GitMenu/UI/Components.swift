@@ -80,6 +80,66 @@ enum Appearance {
     }
 }
 
+/// Review decision and check status for a pull request, as one quiet line.
+struct StatusBadges: View {
+    var isDraft = false
+    let reviewDecision: String?
+    let checksState: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if isDraft { Text("Draft").foregroundStyle(.secondary) }
+            if let r = reviewDecision {
+                Text(r.replacingOccurrences(of: "_", with: " ").lowercased().capitalized)
+                    .foregroundStyle(r == "APPROVED" ? Appearance.stateColor(.open) : r == "CHANGES_REQUESTED" ? Appearance.stateColor(.closed) : .secondary)
+            }
+            if let c = checksState {
+                HStack(spacing: 4) {
+                    Circle().fill(c == "SUCCESS" ? Appearance.stateColor(.open) : c == "FAILURE" || c == "ERROR" ? Appearance.stateColor(.closed) : .orange).frame(width: 6, height: 6)
+                    Text("Checks " + c.lowercased()).foregroundStyle(.secondary)
+                }
+            }
+            Text(" ")
+        }
+        .font(.system(size: 12))
+        .lineLimit(1)
+    }
+}
+
+/// The actions every thread menu offers: the row's context menu, its "more" button and the detail toolbar.
+struct ThreadActions: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var prefs: Prefs
+    let thread: NotificationThread
+
+    var body: some View {
+        let repo = thread.repository.fullName
+        Button("Open on GitHub") { model.open(thread) }
+        Button("Mark as read") { model.markRead(thread) }.disabled(!thread.unread)
+        Button("Mark as done") { model.markDone(thread) }
+        if prefs.snoozed[thread.id] != nil {
+            Button("Unsnooze") { model.unsnooze(thread) }
+        } else {
+            Menu("Snooze") {
+                ForEach(Snooze.allCases, id: \.self) { s in
+                    Button(s.title) { model.snooze(thread, s) }
+                }
+            }
+        }
+        Divider()
+        if let u = model.webUrl(thread) {
+            Button("Copy link") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(u.absoluteString, forType: .string)
+            }
+        }
+        Button("Mute thread") { model.mute(thread) }
+        Toggle("Silence banners from \(thread.repository.name)", isOn: Binding(
+            get: { prefs.silencedRepos.contains(repo) },
+            set: { on in if on { prefs.silencedRepos.insert(repo) } else { prefs.silencedRepos.remove(repo) } }))
+    }
+}
+
 struct Hairline: View {
     var body: some View { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
 }
