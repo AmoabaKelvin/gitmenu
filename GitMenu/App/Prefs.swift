@@ -23,6 +23,7 @@ final class Prefs: ObservableObject {
     @Published var pollInterval: Double { didSet { Self.d.set(pollInterval, forKey: "pollInterval") } }
     @Published var bannersEnabled: Bool { didSet { Self.d.set(bannersEnabled, forKey: "bannersEnabled") } }
     @Published var playSound: Bool { didSet { Self.d.set(playSound, forKey: "playSound") } }
+    @Published var autoUpdateCheck: Bool { didSet { Self.d.set(autoUpdateCheck, forKey: "autoUpdateCheck") } }
     /// Reasons and repositories that never raise a banner. They still show in the inbox.
     @Published var silencedReasons: Set<String> { didSet { Self.d.set(Array(silencedReasons), forKey: "silencedReasons") } }
     @Published var silencedRepos: Set<String> { didSet { Self.d.set(Array(silencedRepos), forKey: "silencedRepos") } }
@@ -43,6 +44,7 @@ final class Prefs: ObservableObject {
         pollInterval = d.object(forKey: "pollInterval") as? Double ?? 5
         bannersEnabled = bool("bannersEnabled", true)
         playSound = bool("playSound", true)
+        autoUpdateCheck = bool("autoUpdateCheck", true)
         silencedReasons = set("silencedReasons")
         silencedRepos = set("silencedRepos")
         collapsedRepos = set("collapsedRepos")

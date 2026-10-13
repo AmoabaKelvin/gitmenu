@@ -4,12 +4,13 @@ A macOS menu bar app for GitHub notifications. Native Swift, no Electron.
 
 - Inbox with unread first, a "For you" view for mentions, review requests and assignments, and live lists of issues assigned to you and pull requests waiting on your review.
 - Polls GitHub every 5 seconds with conditional requests, so new activity shows up within seconds of GitHub recording it.
-- Thread view with a timeline of comments, reviews and events, rendered markdown, and @mentions that open profiles.
+- Thread view with a timeline of comments, reviews and events, rendered markdown, and @mentions that open profiles. Assigned issues and review requests open in the same view.
 - System notifications with Open and Mark done actions; one banner per thread that updates in place.
 - Filter by repository, title or author, group the inbox by repository, and snooze threads until later.
 - Keyboard driven: a global shortcut opens the panel (⌃⌥G by default) and the list has single-key actions.
 - Octocat in the menu bar with the unread count; it dims when syncing is failing. Launch at login.
 - Settings for the shortcut, poll interval, and which reasons and repositories raise a banner.
+- Updates itself from GitHub releases: checks every six hours and installs in place when the download carries the same signature as the running app.
 
 ## Keyboard
 

@@ -41,6 +41,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var snoozedThreads: [NotificationThread] = []
     @Published private(set) var work = WorkLists()
     @Published var selected: NotificationThread?
+    /// Assigned or review item open in the detail view.
+    @Published private(set) var selectedWork: WorkItem?
+    @Published private(set) var workDetails: [String: ThreadDetails] = [:]
     @Published var signInError: String?
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled {
         didSet { try? launchAtLogin ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister() }
@@ -50,12 +53,15 @@ final class AppModel: ObservableObject {
 
     let notifier = Notifier()
     let prefs = Prefs()
+    let updater = Updater()
     private let store = Store()
     private var client: GitHubClient!
     private var token: String?
     private var poller: Poller?
     private var workPoller: WorkPoller?
     private var prefsSink: AnyCancellable?
+    private var updaterSink: AnyCancellable?
+    private var autoUpdateCheck = false
     /// Hidden until GitHub confirms the delete, so a poll in between cannot bring them back.
     private var pendingDone: Set<String> = []
     var onMenuBarChange: (() -> Void)?
@@ -130,14 +136,23 @@ final class AppModel: ObservableObject {
         logger.info("launch: token present=\(hasToken)")
         if hasToken { Task { await finishSignIn() } }
         prefsSink = prefs.objectWillChange.receive(on: RunLoop.main).sink { [weak self] _ in self?.prefsChanged() }
+        updaterSink = updater.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        syncUpdateSchedule()
         let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in Task { @MainActor in self?.wakeSnoozed() } }
         RunLoop.main.add(t, forMode: .common)
     }
 
     private func prefsChanged() {
         poller?.setInterval(prefs.pollInterval)
+        syncUpdateSchedule()
         loadFromStore()
         onPrefsChange?()
+    }
+
+    private func syncUpdateSchedule() {
+        guard prefs.autoUpdateCheck != autoUpdateCheck, Snapshot.dir == nil else { return }
+        autoUpdateCheck = prefs.autoUpdateCheck
+        updater.schedule(enabled: autoUpdateCheck)
     }
 
     private func loadFromStore() {
@@ -215,6 +230,8 @@ final class AppModel: ObservableObject {
         snoozedThreads = []
         user = nil
         selected = nil
+        selectedWork = nil
+        workDetails = [:]
         issue = nil
         query = ""
         searching = false
@@ -233,6 +250,26 @@ final class AppModel: ObservableObject {
 
     func open(_ item: WorkItem) {
         if let url = URL(string: item.url) { NSWorkspace.shared.open(url) }
+    }
+
+    func workThread(_ item: WorkItem) -> NotificationThread {
+        item.thread(reason: tab == .reviews ? "review_requested" : "assign")
+    }
+
+    /// Opens the item in the panel and loads its timeline; a cached copy stays up while it refreshes.
+    func show(_ item: WorkItem) {
+        selectedWork = item
+        guard let u = user else { return }
+        let t = workThread(item)
+        Task {
+            let d = await Enricher(client: client, userId: u.id).enrich([t])
+            if let details = d[t.id] { workDetails[item.id] = details }
+        }
+    }
+
+    func closeDetail() {
+        selected = nil
+        selectedWork = nil
     }
 
     private func handle(_ d: SyncDelta) {
@@ -324,14 +361,14 @@ final class AppModel: ObservableObject {
         if cursor == nil { moveCursor(1) }
         guard let c = cursor else { return }
         switch tab {
-        case .assigned: work.assigned.first { $0.id == c }.map(open)
-        case .reviews: work.reviews.first { $0.id == c }.map(open)
+        case .assigned: work.assigned.first { $0.id == c }.map(show)
+        case .reviews: work.reviews.first { $0.id == c }.map(show)
         default: selected = cursorThread
         }
     }
 
     func startSearch() {
-        selected = nil
+        closeDetail()
         searching = true
     }
 
@@ -354,6 +391,15 @@ final class AppModel: ObservableObject {
             return true
         }
         guard mods.isEmpty else { return false }
+
+        if let item = selectedWork {
+            switch (e.keyCode, key) {
+            case (53, _): selectedWork = nil
+            case (36, _), (_, "o"): open(item)
+            default: return false
+            }
+            return true
+        }
 
         if let t = selected {
             switch (e.keyCode, key) {

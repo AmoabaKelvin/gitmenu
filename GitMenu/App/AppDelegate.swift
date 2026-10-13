@@ -105,6 +105,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         login.target = self
         login.state = model.launchAtLogin ? .on : .off
         menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
+        if let v = model.updater.availableVersion {
+            menu.addItem(withTitle: "Install update \(v) and relaunch", action: #selector(installUpdate), keyEquivalent: "").target = self
+        } else {
+            menu.addItem(withTitle: "Check for updates", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit GitMenu", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Attaching the menu only for this click keeps left click bound to the panel.
@@ -116,6 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func openFromMenu() { open() }
     @objc private func refreshFromMenu() { model.refresh() }
     @objc private func toggleLaunchAtLogin() { model.launchAtLogin.toggle() }
+    @objc private func installUpdate() { Task { await model.updater.install() } }
+    /// The answer shows in Settings, so open it.
+    @objc private func checkForUpdates() {
+        showSettings()
+        Task { await model.updater.check() }
+    }
 
     private func open() {
         guard let button = statusItem.button, let window = button.window else { return }
@@ -186,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func showSettings() {
         close()
         if settingsWindow == nil {
-            let view = SettingsView().environmentObject(model).environmentObject(model.prefs)
+            let view = SettingsView(updater: model.updater).environmentObject(model).environmentObject(model.prefs)
             let w = NSWindow(contentViewController: NSHostingController(rootView: view))
             w.title = "GitMenu Settings"
             w.styleMask = [.titled, .closable]

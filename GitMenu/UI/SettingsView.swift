@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var prefs: Prefs
+    @ObservedObject var updater: Updater
 
     private static let shortcuts: [(keys: String, action: String)] = [
         ("J K or ↑ ↓", "Move through the list"),
@@ -72,6 +73,17 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: $prefs.autoUpdateCheck)
+                LabeledContent(updateStatus) {
+                    switch updater.state {
+                    case .checking, .installing: ProgressView().controlSize(.small)
+                    case .available(let v): Button("Install \(v) and relaunch") { Task { await updater.install() } }
+                    default: Button("Check now") { Task { await updater.check() } }
+                    }
+                }
+            }
+
             if let u = model.user {
                 Section("Account") {
                     LabeledContent("Signed in as \(u.login)") { Button("Sign out") { model.signOut() } }
@@ -80,6 +92,19 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480, height: 640)
+    }
+}
+
+extension SettingsView {
+    private var updateStatus: String {
+        switch updater.state {
+        case .idle: return "Version \(updater.current)"
+        case .checking: return "Checking for updates…"
+        case .upToDate: return "Version \(updater.current) is the latest"
+        case .available(let v): return "Version \(v) is available"
+        case .installing(let v): return "Installing \(v)…"
+        case .failed(let reason): return "Update failed: \(reason)"
+        }
     }
 }
 

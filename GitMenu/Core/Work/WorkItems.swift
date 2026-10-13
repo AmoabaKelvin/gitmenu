@@ -18,6 +18,18 @@ struct WorkItem: Identifiable, Hashable {
 
     var state: SubjectState { isDraft ? .draft : .open }
     var subjectType: String { isPullRequest ? "PullRequest" : "Issue" }
+
+    /// Stand-in thread so the detail view and the enricher can treat a work item like a notification.
+    func thread(reason: String) -> NotificationThread {
+        let owner = String(repo.split(separator: "/").first ?? "")
+        return NotificationThread(
+            id: "work:\(id)", unread: false, reason: reason, updatedAt: updatedAt, lastReadAt: nil,
+            subject: .init(title: title, url: "https://api.github.com/repos/\(repo)/\(isPullRequest ? "pulls" : "issues")/\(number)",
+                           latestCommentUrl: nil, type: subjectType),
+            repository: .init(id: 0, name: repoName, fullName: repo, htmlUrl: "https://github.com/\(repo)", private: false,
+                              owner: .init(login: owner, avatarUrl: "")),
+            url: "", subscriptionUrl: "")
+    }
 }
 
 struct WorkLists {

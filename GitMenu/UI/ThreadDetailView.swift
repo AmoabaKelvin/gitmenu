@@ -3,9 +3,16 @@ import SwiftUI
 struct ThreadDetailView: View {
     @EnvironmentObject var model: AppModel
     let thread: NotificationThread
+    /// Set when showing an assigned or review item, which has no notification behind it.
+    var work: WorkItem? = nil
 
-    private var details: ThreadDetails? { model.details[thread.id] }
-    private var state: SubjectState { details?.state ?? .none }
+    private var details: ThreadDetails? {
+        if let work { return model.workDetails[work.id] }
+        return model.details[thread.id]
+    }
+    private var state: SubjectState { details?.state ?? work?.state ?? .none }
+    private var reviewDecision: String? { details?.reviewDecision ?? work?.reviewDecision }
+    private var checksState: String? { details?.checksState ?? work?.checksState }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,7 +34,7 @@ struct ThreadDetailView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Button { model.open(thread) } label: {
+                Button { if let work { model.open(work) } else { model.open(thread) } } label: {
                     HStack(spacing: 6) { Icon(name: "arrow-up-right", size: 14); Text("Open on GitHub") }
                 }
                 .buttonStyle(.borderedProminent)
@@ -36,26 +43,34 @@ struct ThreadDetailView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        .onAppear { model.markRead(thread) }
+        .onAppear { if work == nil { model.markRead(thread) } }
     }
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Button { model.selected = nil } label: {
-                HStack(spacing: 2) { Icon(name: "chevron-left", size: 14); Text("Inbox") }
+            Button { model.closeDetail() } label: {
+                HStack(spacing: 2) { Icon(name: "chevron-left", size: 14); Text(work == nil ? "Inbox" : model.tab.rawValue) }
             }
             .buttonStyle(.borderless)
             .keyboardShortcut(.escape, modifiers: [])
             Spacer()
-            Button("Mark done") { model.markDone(thread) }
+            if let work {
+                Button("Copy link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(work.url, forType: .string)
+                }
                 .controlSize(.small)
-                .keyboardShortcut("e", modifiers: [])
-            Menu {
-                ThreadActions(thread: thread)
-            } label: { Icon(name: "more", size: 16) }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            } else {
+                Button("Mark done") { model.markDone(thread) }
+                    .controlSize(.small)
+                    .keyboardShortcut("e", modifiers: [])
+                Menu {
+                    ThreadActions(thread: thread)
+                } label: { Icon(name: "more", size: 16) }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -66,7 +81,7 @@ struct ThreadDetailView: View {
             HStack(spacing: 6) {
                 Icon(name: Appearance.glyph(type: thread.subject.type, state: state), size: 15)
                     .foregroundStyle(Appearance.stateColor(state))
-                if let n = details?.number ?? thread.subjectNumber, let url = URL(string: details?.htmlUrl ?? thread.repository.htmlUrl) {
+                if let n = details?.number ?? thread.subjectNumber, let url = URL(string: details?.htmlUrl ?? work?.url ?? thread.repository.htmlUrl) {
                     Link("#" + String(n), destination: url)
                         .font(.system(size: 12).monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -87,20 +102,20 @@ struct ThreadDetailView: View {
                 factLabel("Status")
                 HStack(spacing: 10) {
                     Text(statusText).foregroundStyle(Appearance.stateColor(state))
-                    if let r = details?.reviewDecision, let (icon, text, color) = reviewBadge(r) {
+                    if let r = reviewDecision, let (icon, text, color) = reviewBadge(r) {
                         HStack(spacing: 4) { Icon(name: icon, size: 14); Text(text) }
                             .foregroundStyle(color)
                             .lineLimit(1)
                             .fixedSize()
                     }
-                    if let c = details?.checksState {
+                    if let c = checksState {
                         Icon(name: c == "SUCCESS" ? "check-circle" : (c == "FAILURE" || c == "ERROR") ? "cancel-circle" : "clock", size: 15)
                             .foregroundStyle(c == "SUCCESS" ? Appearance.stateColor(.open) : (c == "FAILURE" || c == "ERROR") ? Appearance.stateColor(.closed) : .orange)
                             .help("Checks: \(c.lowercased())")
                     }
                 }
             }
-            if let a = details?.author {
+            if let a = details?.author ?? work?.author {
                 GridRow {
                     factLabel("Author")
                     HStack(spacing: 6) { Avatar(url: a.avatarUrl, size: 18); Text(a.login) }
@@ -160,12 +175,26 @@ struct ThreadDetailView: View {
 
     @ViewBuilder private var timeline: some View {
         let all = details?.activities ?? []
-        let fresh = Set((details?.newActivities(since: thread.lastReadAt) ?? []).map(\.id))
-        let new = all.filter { fresh.contains($0.id) }.reversed()
-        let earlier = all.filter { !fresh.contains($0.id) }.reversed()
-        if !new.isEmpty { timelineSection("New", Array(new)) }
-        if !earlier.isEmpty { timelineSection("Earlier", Array(earlier)) }
-        if all.isEmpty, let b = details?.body, !b.isEmpty {
+        if work != nil {
+            // No read marker to split on, so the description leads and the activity follows in one run.
+            if details == nil {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Loading activity…").foregroundStyle(.secondary) }
+                    .font(.system(size: 13))
+            }
+            description
+            if !all.isEmpty { timelineSection("Activity", all.reversed()) }
+        } else {
+            let fresh = Set((details?.newActivities(since: thread.lastReadAt) ?? []).map(\.id))
+            let new = all.filter { fresh.contains($0.id) }.reversed()
+            let earlier = all.filter { !fresh.contains($0.id) }.reversed()
+            if !new.isEmpty { timelineSection("New", Array(new)) }
+            if !earlier.isEmpty { timelineSection("Earlier", Array(earlier)) }
+            if all.isEmpty { description }
+        }
+    }
+
+    @ViewBuilder private var description: some View {
+        if let b = details?.body, !b.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Description").font(.system(size: 15, weight: .semibold))
                 MarkdownText(source: b, lineLimit: 14).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

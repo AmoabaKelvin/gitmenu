@@ -123,7 +123,7 @@ struct InboxView: View {
                         ForEach(items) { item in
                             WorkRow(item: item, focused: model.cursor == item.id)
                                 .contentShape(Rectangle())
-                                .onTapGesture { model.open(item) }
+                                .onTapGesture { model.show(item) }
                                 .id(item.id)
                         }
                     }
@@ -200,6 +200,14 @@ struct InboxView: View {
             if let u = model.user {
                 Avatar(url: u.avatarUrl, size: 16)
                 Text(u.login).font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            if let v = model.updater.availableVersion {
+                Button("Update to \(v)") { Task { await model.updater.install() } }
+                    .controlSize(.small)
+                    .help("Download, install and relaunch")
+            } else if case .installing = model.updater.state {
+                ProgressView().controlSize(.small)
+                Text("Updating…").font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
             if let d = model.lastSync {
