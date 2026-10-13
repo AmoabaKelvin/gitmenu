@@ -171,7 +171,7 @@ struct Enricher {
                 guard let n, let l = n["login"] as? String else { return nil }
                 return .init(login: l, avatarUrl: n["avatarUrl"] as? String ?? "")
             }
-            let items = ((node["timelineItems"] ?? node["comments"]) as? [String: Any])?["nodes"] as? [[String: Any]] ?? []
+            let items = ((((node["timelineItems"] ?? node["comments"]) as? [String: Any])?["nodes"] as? [Any]) ?? []).compactMap { $0 as? [String: Any] }
             for n in items {
                 guard let id = n["id"] as? String, let c = n["createdAt"] as? String, let date = iso.date(from: c) else { continue }
                 let typename = n["__typename"] as? String ?? "IssueComment"

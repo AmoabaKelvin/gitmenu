@@ -77,7 +77,9 @@ struct InboxView: View {
         case .reviews: workList(model.visibleWork(model.work.reviews), empty: "No reviews waiting on you.")
         default:
             let items = model.visible
-            if items.isEmpty {
+            if items.isEmpty, model.lastSync == nil, model.issue == nil {
+                loadingState("Syncing your notifications…")
+            } else if items.isEmpty {
                 emptyState(model.showSnoozed ? "Nothing snoozed." : "You're all caught up.")
             } else {
                 ScrollView {
@@ -109,7 +111,11 @@ struct InboxView: View {
 
     private func workList(_ items: [WorkItem], empty: String) -> some View {
         Group {
-            if items.isEmpty {
+            if items.isEmpty, let error = model.work.error {
+                workError(error)
+            } else if items.isEmpty, !model.work.loaded {
+                loadingState("Loading…")
+            } else if items.isEmpty {
                 emptyState(empty)
             } else {
                 ScrollView {
@@ -137,6 +143,35 @@ struct InboxView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func loadingState(_ text: String) -> some View {
+        VStack(spacing: 10) {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Text(text).font(.callout).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// An empty Assigned or Reviews list that failed to load must not read as "nothing to do".
+    private func workError(_ reason: String) -> some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Icon(name: "alert", size: 28).foregroundStyle(.orange)
+            Text("Couldn't load this list").font(.callout)
+            Text(reason)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
+                .textSelection(.enabled)
+            Button("Retry") { model.refresh() }.controlSize(.small)
             Spacer()
         }
         .padding(.horizontal, 24)

@@ -23,6 +23,9 @@ struct WorkItem: Identifiable, Hashable {
 struct WorkLists {
     var assigned: [WorkItem] = []
     var reviews: [WorkItem] = []
+    /// False until the first answer from GitHub, so an empty list is not shown as "nothing assigned".
+    var loaded = false
+    var error: String?
 }
 
 @MainActor
@@ -31,6 +34,7 @@ final class WorkPoller {
     private let onUpdate: (WorkLists) -> Void
     private var timer: Timer?
     private var running = false
+    private var last = WorkLists()
 
     init(client: GitHubClient, onUpdate: @escaping (WorkLists) -> Void) {
         self.client = client
@@ -65,12 +69,18 @@ final class WorkPoller {
         }
         fragment IS on Issue { id number title url updatedAt author { ...Actor } repository { nameWithOwner name } }
         """
-        guard let json = try? await client.graphql(query), let data = json["data"] as? [String: Any] else {
-            logger.error("work poll failed")
-            return
-        }
+        let json: [String: Any]
+        do { json = try await client.graphql(query) } catch { return fail(error.localizedDescription) }
+        // GraphQL reports scope and SSO problems here, often next to partial data.
+        let problem = (json["errors"] as? [[String: Any]])?.first?["message"] as? String
+        guard let data = json["data"] as? [String: Any] else { return fail(problem ?? "GitHub returned no data.") }
+        if let problem { logger.error("work poll partial: \(problem)") }
         let iso = ISO8601DateFormatter()
-        let directIds = Set((((data["direct"] as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String })
+        // Items GitHub refuses to show this token come back as null entries; casting the whole array would drop the list.
+        func nodes(_ key: String) -> [[String: Any]] {
+            (((data[key] as? [String: Any])?["nodes"] as? [Any]) ?? []).compactMap { $0 as? [String: Any] }
+        }
+        let directIds = Set(nodes("direct").compactMap { $0["id"] as? String })
         func parse(_ n: [String: Any], team: Bool) -> WorkItem? {
             guard let id = n["id"] as? String, let number = n["number"] as? Int, let title = n["title"] as? String,
                   let url = n["url"] as? String, let repo = n["repository"] as? [String: Any],
@@ -84,15 +94,23 @@ final class WorkPoller {
                             reviewDecision: n["reviewDecision"] as? String, checksState: roll?["state"] as? String,
                             author: a, updatedAt: date, viaTeam: team)
         }
-        var lists = WorkLists()
-        for n in (((data["reviews"] as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []) {
+        var lists = WorkLists(loaded: true, error: problem)
+        for n in nodes("reviews") {
             if let item = parse(n, team: !directIds.contains(n["id"] as? String ?? "")) { lists.reviews.append(item) }
         }
-        for n in (((data["assigned"] as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []) {
+        for n in nodes("assigned") {
             if let item = parse(n, team: false) { lists.assigned.append(item) }
         }
         lists.reviews.sort { $0.updatedAt > $1.updatedAt }
         lists.assigned.sort { $0.updatedAt > $1.updatedAt }
+        last = lists
         onUpdate(lists)
+    }
+
+    /// Keeps the last good lists on screen and says why they are not fresh.
+    private func fail(_ reason: String) {
+        logger.error("work poll failed: \(reason)")
+        last.error = reason
+        onUpdate(last)
     }
 }
