@@ -24,8 +24,8 @@ targets:
       properties:
         CFBundleName: GitMenu
         CFBundleDisplayName: GitMenu
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.1"
+        CFBundleVersion: "3"
         LSUIElement: true
         CFBundleIconFile: AppIcon
         LSMinimumSystemVersion: "14.0"
