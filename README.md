@@ -9,7 +9,7 @@ A macOS menu bar app for GitHub notifications. Native Swift, no Electron.
 - Filter by repository, title or author, group the inbox by repository, and snooze threads until later.
 - Keyboard driven: a global shortcut opens the panel (⌃⌥G by default) and the list has single-key actions.
 - Octocat in the menu bar with the unread count; it dims when syncing is failing. Launch at login.
-- Settings for the shortcut, poll interval, and which reasons and repositories raise a banner.
+- Settings for the shortcut, poll interval, which kinds of notification and which repositories show in the inbox, and which raise a banner.
 - Updates itself from GitHub releases: checks every six hours and installs in place when the download carries the same signature as the running app.
 
 ## Keyboard

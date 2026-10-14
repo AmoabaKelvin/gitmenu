@@ -155,8 +155,12 @@ final class AppModel: ObservableObject {
         updater.schedule(enabled: autoUpdateCheck)
     }
 
+    private func wanted(_ t: NotificationThread) -> Bool {
+        !prefs.hiddenReasons.contains(t.reason) && !prefs.hiddenRepos.contains(t.repository.fullName)
+    }
+
     private func loadFromStore() {
-        let all = store.state.threads.values.filter { !pendingDone.contains($0.id) }
+        let all = store.state.threads.values.filter { !pendingDone.contains($0.id) && wanted($0) }
         threads = all.filter { prefs.snoozed[$0.id] == nil }.map { prefs.resurfaced.contains($0.id) ? $0.with(unread: true) : $0 }
         snoozedThreads = all.filter { prefs.snoozed[$0.id] != nil }
         details = store.state.details
@@ -278,7 +282,7 @@ final class AppModel: ObservableObject {
         if let s = selected, let fresh = store.state.threads[s.id] { selected = fresh }
         guard !d.isFirstSync, prefs.bannersEnabled else { return }
         let fresh = (d.added + d.updated).filter { t in
-            t.unread && t.updatedAt > d.previousNewest && prefs.snoozed[t.id] == nil
+            t.unread && t.updatedAt > d.previousNewest && prefs.snoozed[t.id] == nil && wanted(t)
                 && !prefs.silencedReasons.contains(t.reason) && !prefs.silencedRepos.contains(t.repository.fullName)
         }
         if fresh.count > 20 { logger.info("suppressing \(fresh.count) notifications from a bulk change"); return }

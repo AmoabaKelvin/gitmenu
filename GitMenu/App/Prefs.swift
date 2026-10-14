@@ -27,6 +27,9 @@ final class Prefs: ObservableObject {
     /// Reasons and repositories that never raise a banner. They still show in the inbox.
     @Published var silencedReasons: Set<String> { didSet { Self.d.set(Array(silencedReasons), forKey: "silencedReasons") } }
     @Published var silencedRepos: Set<String> { didSet { Self.d.set(Array(silencedRepos), forKey: "silencedRepos") } }
+    /// Reasons and repositories left out of GitMenu entirely: inbox, counts and banners.
+    @Published var hiddenReasons: Set<String> { didSet { Self.d.set(Array(hiddenReasons), forKey: "hiddenReasons") } }
+    @Published var hiddenRepos: Set<String> { didSet { Self.d.set(Array(hiddenRepos), forKey: "hiddenRepos") } }
     @Published var collapsedRepos: Set<String> { didSet { Self.d.set(Array(collapsedRepos), forKey: "collapsedRepos") } }
     /// nil means the user cleared the shortcut.
     @Published var hotKey: HotKeyCombo? { didSet { Self.d.set(hotKey.flatMap { try? JSONEncoder().encode($0) } ?? Data(), forKey: "hotKey") } }
@@ -47,6 +50,8 @@ final class Prefs: ObservableObject {
         autoUpdateCheck = bool("autoUpdateCheck", true)
         silencedReasons = set("silencedReasons")
         silencedRepos = set("silencedRepos")
+        hiddenReasons = set("hiddenReasons")
+        hiddenRepos = set("hiddenRepos")
         collapsedRepos = set("collapsedRepos")
         resurfaced = set("resurfaced")
         snoozed = ((d.dictionary(forKey: "snoozed") as? [String: Double]) ?? [:]).mapValues(Date.init(timeIntervalSince1970:))

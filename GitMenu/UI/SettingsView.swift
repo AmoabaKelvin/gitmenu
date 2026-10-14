@@ -36,6 +36,29 @@ struct SettingsView: View {
             }
 
             Section {
+                DisclosureGroup {
+                    // Reasons outside the known list can still be hidden from a row's menu, so list them to undo.
+                    ForEach(Reason.all + prefs.hiddenReasons.subtracting(Reason.all).sorted(), id: \.self) { r in
+                        Toggle(Reason.phrase(r), isOn: Binding(
+                            get: { !prefs.hiddenReasons.contains(r) },
+                            set: { on in if on { prefs.hiddenReasons.remove(r) } else { prefs.hiddenReasons.insert(r) } }))
+                    }
+                } label: {
+                    LabeledContent("Show in the inbox") {
+                        Text(prefs.hiddenReasons.isEmpty ? "Everything" : prefs.hiddenReasons.sorted().map(Reason.phrase).joined(separator: ", ") + " hidden")
+                            .lineLimit(1)
+                    }
+                }
+                ForEach(prefs.hiddenRepos.sorted(), id: \.self) { repo in
+                    LabeledContent("Hiding \(repo)") { Button("Show") { prefs.hiddenRepos.remove(repo) } }
+                }
+            } header: {
+                Text("Inbox")
+            } footer: {
+                Text("Hidden notifications stay on GitHub but leave GitMenu: no row, no count, no banner. Right-click a notification to hide its kind or its repository.")
+            }
+
+            Section {
                 Toggle("Show banners for new activity", isOn: $prefs.bannersEnabled)
                 Group {
                     Toggle("Play a sound for mentions, reviews and assignments", isOn: $prefs.playSound)

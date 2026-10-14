@@ -137,6 +137,9 @@ struct ThreadActions: View {
         Toggle("Silence banners from \(thread.repository.name)", isOn: Binding(
             get: { prefs.silencedRepos.contains(repo) },
             set: { on in if on { prefs.silencedRepos.insert(repo) } else { prefs.silencedRepos.remove(repo) } }))
+        Divider()
+        Button("Hide all \u{201C}\(Reason.phrase(thread.reason))\u{201D} notifications") { prefs.hiddenReasons.insert(thread.reason) }
+        Button("Hide everything from \(thread.repository.name)") { prefs.hiddenRepos.insert(repo) }
     }
 }
 
